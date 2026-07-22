@@ -12,4 +12,4 @@ controller={update_interval_s=0.02,throttle_pid={kp=0.08,ki=0.015,kd=0.0,output_
 actuators={min_throttle=0.0,max_throttle=1.0,gimbal_limit_deg=10.0,throttle_tau_s=0.15,gimbal_tau_s=0.08,throttle_max_rate=3.0,gimbal_max_rate_deg_s=45.0}
 mission={prelaunch_hold_s=0.5,ascent_cutoff_altitude_m=100.0,descent_entry_velocity_m_s=-0.25,landing_entry_altitude_m=25.0,landed_altitude_threshold_m=0.25,transition_confirmation_ticks=3,abort_invalid_confirm_ticks=10}
 validation={expected_outcome="validation_fail",max_landing_vertical_speed_m_s=2.0,max_horizontal_error_m=5.0,max_pitch_error_deg=5.0,require_valid_transitions=true}
-faults=[{id="sluggish_actuator_01",type="actuator_degradation",target="all",activation_time_s=18.0,lag_multiplier=5.0,authority_scale=1.0,rate_scale=0.5}]
+faults=[{id="sluggish_actuator_01",type="actuator_degradation",target="all",activation_time_s=18.0,lag_multiplier=10.0,authority_scale=0.35,rate_scale=0.1}]

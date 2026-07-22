@@ -144,7 +144,13 @@ def validate_run(config: ResolvedScenarioConfig, telemetry: CompletedTelemetry) 
         actual = ActualOutcome.VALIDATION_FAIL
     matched = actual.value == config.validation.expected_outcome.value
     checks.append(ValidationCheck("expected_outcome", CheckStatus.PASS if matched else CheckStatus.FAIL, f"Actual outcome {actual.value} {'matched' if matched else 'did not match'} expected {config.validation.expected_outcome.value}.", actual.value, config.validation.expected_outcome.value))
-    scenario_passed = all(check.status is not CheckStatus.FAIL for check in checks)
+    # A curated scenario is a regression contract, not necessarily a successful
+    # physical mission.  For example, a deliberately biased sensor should make
+    # the landing validation fail; reproducing that declared outcome is a
+    # successful scenario test.  Infrastructure checks must still pass.
+    scenario_passed = matched and faults_ok and (
+        valid_transitions or not config.validation.require_valid_transitions
+    )
     evaluation = touchdown or final
     metrics = ValidationMetrics(
         signed_vy, speed, horizontal, pitch,
