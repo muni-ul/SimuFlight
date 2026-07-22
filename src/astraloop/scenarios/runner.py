@@ -1,8 +1,6 @@
 """Fresh deterministic subsystem construction and per-tick orchestration."""
 
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from astraloop.actuators.models import ActuatorModel
 from astraloop.config.loader import load_scenario
@@ -14,18 +12,8 @@ from astraloop.mission.state_machine import MissionContext, MissionStateMachine
 from astraloop.model.results import RunResult, SimulationResult, TerminationReason
 from astraloop.sensors.suite import SensorSuite
 from astraloop.simulation.engine import SimulationEngine
-
-
-@dataclass(frozen=True, slots=True)
-class RuntimeFrame:
-    tick: int
-    time: float
-    truth: Any
-    measurements: Any
-    mission_state: str
-    controller_update: Any
-    actuator_update: Any
-    active_fault_ids: tuple[str, ...]
+from astraloop.telemetry.recorder import TelemetryFrame, TelemetryFrameKind, TelemetryRecorder
+from astraloop.telemetry.serialization import ArtifactWriter
 
 
 def run_scenario(
@@ -39,14 +27,16 @@ def run_scenario(
     mission = MissionStateMachine(config.mission)
     faults = FaultManager(list(config.faults), config.simulation.dt)
     engine = SimulationEngine(config.simulation, config.vehicle, config.initial_state)
-    frames: list[RuntimeFrame] = []
-    events: list[Any] = []
+    recorder = TelemetryRecorder(config.simulation.dt)
+    recorder.record_simulation_event(0, "simulation_started", "Simulation started.", {"scenario_id": config.id, "seed": config.seed, "config_digest": config.digest})
     active_faults: tuple[str, ...] = ()
+    measurement = control_update = actuator_update = None
 
     while engine.tick < config.simulation.max_ticks:
         effects, fault_events = faults.update(engine.tick)
         faults.apply(effects, sensors, actuators)
-        events.extend(fault_events)
+        for event in fault_events:
+            recorder.record_domain_event(event)
         active_faults = effects.active_fault_ids
         measurement = sensors.sample(engine.state, engine.tick)
         mission_update = mission.update(
@@ -54,36 +44,64 @@ def run_scenario(
             MissionContext(engine.tick, config.simulation.dt),
         )
         if mission_update.event is not None:
-            events.append(mission_update.event)
+            recorder.record_domain_event(mission_update.event)
         control_update = controller.update(measurement, mission.state)
         actuator_update = actuators.update(control_update.command, config.simulation.dt)
-        frames.append(
-            RuntimeFrame(
-                engine.tick, engine.sim_time, engine.state, measurement,
-                mission.state.value, control_update, actuator_update, active_faults,
-            )
-        )
         if mission.state in TERMINAL_MODES:
             simulation = SimulationResult(
                 engine.tick, engine.sim_time, engine.state,
                 TerminationReason.TERMINAL_CONDITION,
             )
             break
+        frame = TelemetryFrame(
+            1, TelemetryFrameKind.CONTROL, engine.tick, engine.sim_time,
+            mission.state.value, engine.state, measurement, control_update,
+            actuator_update, active_faults,
+        )
         engine.step(actuators.applied(), config.environment)
+        recorder.record_frame(frame)
     else:
         simulation = SimulationResult(
             engine.tick, engine.sim_time, engine.state, TerminationReason.MAX_TIME
         )
+
+    terminal = TelemetryFrame(
+        1, TelemetryFrameKind.TERMINAL, engine.tick, engine.sim_time,
+        mission.state.value, engine.state, measurement, control_update,
+        actuator_update, active_faults, simulation.termination_reason.value,
+    )
+    recorder.record_frame(terminal)
+    recorder.record_simulation_event(
+        engine.tick, "simulation_terminated", "Simulation terminated.",
+        {"reason": simulation.termination_reason.value, "final_mission_state": mission.state.value},
+    )
+    completed = recorder.finalize()
+    artifact_directory = None
+    if artifact_root is not None:
+        artifacts = ArtifactWriter(artifact_root).write(
+            config,
+            completed,
+            {
+                "scenario_id": config.id,
+                "config_digest": config.digest,
+                "final_tick": simulation.final_tick,
+                "final_time_s": simulation.final_time,
+                "final_mission_state": mission.state.value,
+                "termination_reason": simulation.termination_reason.value,
+                "validation": None,
+            },
+        )
+        artifact_directory = str(artifacts.directory)
 
     return RunResult(
         config.id,
         config.digest,
         simulation,
         mission.state.value,
-        tuple(frames),
-        tuple(events),
+        completed.frames,
+        completed.events,
         active_faults,
-        str(artifact_root.resolve()) if artifact_root is not None else None,
+        artifact_directory,
     )
 
 
