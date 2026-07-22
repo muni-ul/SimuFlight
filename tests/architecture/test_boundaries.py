@@ -29,3 +29,8 @@ def test_core_subsystems_do_not_branch_on_scenario_names():
     core = [SRC / name for name in ("simulation", "sensors", "control", "actuators", "mission", "faults")]
     text = "\n".join(path.read_text(encoding="utf-8") for root in core for path in root.glob("*.py"))
     assert not forbidden.intersection(text.split())
+
+
+def test_scipy_is_not_imported_by_production_runtime():
+    modules = set().union(*(imports(path) for path in SRC.rglob("*.py")))
+    assert not any(module == "scipy" or module.startswith("scipy.") for module in modules)
