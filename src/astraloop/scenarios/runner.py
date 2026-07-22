@@ -1,6 +1,7 @@
 """Fresh deterministic subsystem construction and per-tick orchestration."""
 
 from pathlib import Path
+from dataclasses import asdict
 
 from astraloop.actuators.models import ActuatorModel
 from astraloop.config.loader import load_scenario
@@ -14,6 +15,7 @@ from astraloop.sensors.suite import SensorSuite
 from astraloop.simulation.engine import SimulationEngine
 from astraloop.telemetry.recorder import TelemetryFrame, TelemetryFrameKind, TelemetryRecorder
 from astraloop.telemetry.serialization import ArtifactWriter
+from astraloop.validation.validator import validate_run
 
 
 def run_scenario(
@@ -76,6 +78,7 @@ def run_scenario(
         {"reason": simulation.termination_reason.value, "final_mission_state": mission.state.value},
     )
     completed = recorder.finalize()
+    validation = validate_run(config, completed)
     artifact_directory = None
     if artifact_root is not None:
         artifacts = ArtifactWriter(artifact_root).write(
@@ -88,20 +91,21 @@ def run_scenario(
                 "final_time_s": simulation.final_time,
                 "final_mission_state": mission.state.value,
                 "termination_reason": simulation.termination_reason.value,
-                "validation": None,
+                "validation": asdict(validation),
             },
         )
         artifact_directory = str(artifacts.directory)
 
     return RunResult(
-        config.id,
-        config.digest,
-        simulation,
-        mission.state.value,
-        completed.frames,
-        completed.events,
-        active_faults,
-        artifact_directory,
+        scenario_id=config.id,
+        config_digest=config.digest,
+        simulation=simulation,
+        final_mission_state=mission.state.value,
+        telemetry=completed.frames,
+        events=completed.events,
+        active_fault_ids=active_faults,
+        validation=validation,
+        artifact_directory=artifact_directory,
     )
 
 

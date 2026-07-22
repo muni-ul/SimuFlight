@@ -29,4 +29,5 @@ class RunResult:
     telemetry: tuple[Any, ...]
     events: tuple[Any, ...]
     active_fault_ids: tuple[str, ...]
+    validation: Any | None = None
     artifact_directory: str | None = None
