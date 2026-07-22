@@ -1,6 +1,7 @@
 """Physical input records at subsystem boundaries."""
 
 from dataclasses import dataclass
+from enum import StrEnum
 
 
 @dataclass(frozen=True, slots=True)
@@ -13,3 +14,25 @@ class AppliedActuation:
 
     throttle: float
     gimbal_angle: float
+
+
+@dataclass(frozen=True, slots=True)
+class ControlCommand:
+    """Desired software command before actuator physics."""
+
+    throttle: float
+    attitude_command: float
+
+
+class ControllerStatus(StrEnum):
+    OK = "ok"
+    HELD = "held"
+    INVALID_INPUT = "invalid_input"
+    INACTIVE = "inactive"
+
+
+@dataclass(frozen=True, slots=True)
+class ControllerUpdate:
+    command: ControlCommand
+    status: ControllerStatus
+    reason: str | None = None
