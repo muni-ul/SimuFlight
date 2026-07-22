@@ -1,7 +1,7 @@
 """Strict local TOML scenario loader and unit resolver."""
 
 from difflib import get_close_matches
-from math import isclose, radians
+from math import isclose, isfinite, radians
 from pathlib import Path
 import re
 import tomllib
@@ -19,7 +19,12 @@ from astraloop.mission.state_machine import MissionConfig
 from astraloop.model.measurements import SensorName
 from astraloop.model.state import VehicleState
 from astraloop.sensors.models import SensorConfig
-from astraloop.simulation.dynamics import VehicleParameters
+from astraloop.simulation.dynamics import (
+    VehicleParameters,
+    validate_environment,
+    validate_parameters,
+    validate_state,
+)
 from astraloop.simulation.engine import SimulationConfig
 from astraloop.simulation.environment import EnvironmentForces
 
@@ -52,11 +57,52 @@ def _number(table: dict, key: str, source: Path, field: str) -> float:
     return float(value)
 
 
+def _boolean(table: dict, key: str, source: Path, field: str) -> bool:
+    value = table.get(key)
+    if not isinstance(value, bool):
+        raise ConfigError(source, f"{field}.{key}", "expected a boolean.")
+    return value
+
+
 def _ticks(seconds: float, dt: float, source: Path, field: str) -> int:
     ratio = seconds / dt
     if not isclose(ratio, round(ratio), rel_tol=1e-10, abs_tol=1e-10):
         raise ConfigError(source, field, "time must align to an integer simulation tick.")
     return round(ratio)
+
+
+def _validate_cross_fields(config: ResolvedScenarioConfig, source: Path) -> None:
+    try:
+        validate_parameters(config.vehicle)
+        validate_state(config.initial_state, config.vehicle)
+        validate_environment(config.environment)
+    except ValueError as exc:
+        raise ConfigError(source, "resolved", str(exc)) from exc
+
+    sensors = config.sensor_mapping()
+    for name, sensor in sensors.items():
+        if not isfinite(sensor.sample_interval) or sensor.sample_interval <= 0.0:
+            raise ConfigError(source, f"sensors.{name.value}.sample_interval_s", "must be finite and positive.")
+        if not isfinite(sensor.delay) or sensor.delay < 0.0:
+            raise ConfigError(source, f"sensors.{name.value}.delay_s", "must be finite and nonnegative.")
+        if not isfinite(sensor.noise_std) or sensor.noise_std < 0.0:
+            raise ConfigError(source, f"sensors.{name.value}.noise_std", "must be finite and nonnegative.")
+        if not isfinite(sensor.bias):
+            raise ConfigError(source, f"sensors.{name.value}.bias", "must be finite.")
+        _ticks(sensor.sample_interval, config.simulation.dt, source, f"sensors.{name.value}.sample_interval_s")
+        _ticks(sensor.delay, config.simulation.dt, source, f"sensors.{name.value}.delay_s")
+
+    if not isfinite(config.controller.control_interval) or config.controller.control_interval <= 0.0:
+        raise ConfigError(source, "controller.update_interval_s", "must be finite and positive.")
+    _ticks(config.controller.control_interval, config.simulation.dt, source, "controller.update_interval_s")
+    for fault in config.faults:
+        if fault.timing.activation_tick >= config.simulation.max_ticks:
+            raise ConfigError(source, f"faults.{fault.id}.activation_time_s", "must occur before max_time.")
+        target = getattr(fault, "target", None)
+        if isinstance(target, SensorName) and not sensors[target].enabled:
+            raise ConfigError(source, f"faults.{fault.id}.target", "cannot target a disabled sensor.")
+        if isinstance(fault, SensorDelayFault) and fault.delay <= sensors[fault.target].delay:
+            raise ConfigError(source, f"faults.{fault.id}.delay_s", "must exceed the nominal sensor delay.")
 
 
 def _pid(raw: dict, source: Path, field: str, degrees_output: bool = False) -> PIDConfig:
@@ -119,9 +165,8 @@ def load_scenario(path: str | Path) -> ResolvedScenarioConfig:
     for name in SensorName:
         item = sensors_raw[name.value]
         _strict(item, {"enabled", "sample_interval_s", "noise_std", "bias", "delay_s"}, source, f"sensors.{name.value}")
-        if not isinstance(item.get("enabled"), bool):
-            raise ConfigError(source, f"sensors.{name.value}.enabled", "expected a boolean.")
-        sensor_items.append((name, SensorConfig(item["enabled"], _number(item, "sample_interval_s", source, f"sensors.{name.value}"), _number(item, "noise_std", source, f"sensors.{name.value}"), _number(item, "bias", source, f"sensors.{name.value}"), _number(item, "delay_s", source, f"sensors.{name.value}"))))
+        enabled = _boolean(item, "enabled", source, f"sensors.{name.value}")
+        sensor_items.append((name, SensorConfig(enabled, _number(item, "sample_interval_s", source, f"sensors.{name.value}"), _number(item, "noise_std", source, f"sensors.{name.value}"), _number(item, "bias", source, f"sensors.{name.value}"), _number(item, "delay_s", source, f"sensors.{name.value}"))))
 
     controller_raw = _table(raw, "controller", source)
     _strict(controller_raw, {"update_interval_s", "throttle_pid", "attitude_pid", "profiles"}, source, "controller")
@@ -134,7 +179,7 @@ def load_scenario(path: str | Path) -> ResolvedScenarioConfig:
         item = profiles_raw[mode.value]
         keys = {"target_vertical_velocity_m_s", "target_pitch_deg", "base_throttle", "throttle_enabled", "attitude_enabled"}
         _strict(item, keys, source, f"controller.profiles.{mode.value}")
-        profiles.append((mode, ControlProfile(_number(item, "target_vertical_velocity_m_s", source, mode.value), radians(_number(item, "target_pitch_deg", source, mode.value)), _number(item, "base_throttle", source, mode.value), bool(item.get("throttle_enabled")), bool(item.get("attitude_enabled")))))
+        profiles.append((mode, ControlProfile(_number(item, "target_vertical_velocity_m_s", source, mode.value), radians(_number(item, "target_pitch_deg", source, mode.value)), _number(item, "base_throttle", source, mode.value), _boolean(item, "throttle_enabled", source, f"controller.profiles.{mode.value}"), _boolean(item, "attitude_enabled", source, f"controller.profiles.{mode.value}"))))
 
     actuator_raw = _table(raw, "actuators", source)
     _strict(actuator_raw, {"min_throttle", "max_throttle", "gimbal_limit_deg", "throttle_tau_s", "gimbal_tau_s", "throttle_max_rate", "gimbal_max_rate_deg_s"}, source, "actuators")
@@ -175,5 +220,10 @@ def load_scenario(path: str | Path) -> ResolvedScenarioConfig:
         expected = ExpectedOutcome(validation_raw["expected_outcome"])
     except (KeyError, ValueError) as exc:
         raise ConfigError(source, "validation.expected_outcome", "unsupported expected outcome.") from exc
-    validation = ValidationConfig(expected, _number(validation_raw, "max_landing_vertical_speed_m_s", source, "validation"), _number(validation_raw, "max_horizontal_error_m", source, "validation"), radians(_number(validation_raw, "max_pitch_error_deg", source, "validation")), bool(validation_raw.get("require_valid_transitions", True)))
-    return ResolvedScenarioConfig(1, scenario_id, description.strip(), seed, simulation, initial_state, vehicle, environment, tuple(sensor_items), controller, tuple(profiles), actuators, mission, tuple(faults), validation)
+    try:
+        validation = ValidationConfig(expected, _number(validation_raw, "max_landing_vertical_speed_m_s", source, "validation"), _number(validation_raw, "max_horizontal_error_m", source, "validation"), radians(_number(validation_raw, "max_pitch_error_deg", source, "validation")), _boolean(validation_raw, "require_valid_transitions", source, "validation"))
+    except ValueError as exc:
+        raise ConfigError(source, "validation", str(exc)) from exc
+    config = ResolvedScenarioConfig(1, scenario_id, description.strip(), seed, simulation, initial_state, vehicle, environment, tuple(sensor_items), controller, tuple(profiles), actuators, mission, tuple(faults), validation)
+    _validate_cross_fields(config, source)
+    return config

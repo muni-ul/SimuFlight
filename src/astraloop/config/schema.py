@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 from enum import StrEnum
 from hashlib import sha256
 import json
+from math import isfinite
 
 from astraloop.actuators.models import ActuatorConfig
 from astraloop.control.flight_controller import ControlProfile, ControllerConfig
@@ -31,6 +32,15 @@ class ValidationConfig:
     max_horizontal_error: float = 5.0
     max_pitch_error: float = 0.08726646259971647
     require_valid_transitions: bool = True
+
+    def __post_init__(self) -> None:
+        limits = (
+            self.max_landing_vertical_speed,
+            self.max_horizontal_error,
+            self.max_pitch_error,
+        )
+        if not all(isfinite(value) and value >= 0.0 for value in limits):
+            raise ValueError("Validation limits must be finite and nonnegative.")
 
 
 @dataclass(frozen=True, slots=True)

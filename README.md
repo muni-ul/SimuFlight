@@ -62,7 +62,7 @@ There is no wall-clock sleeping in physics, sensor delay, controller cadence, or
 | `nominal` | `pass` | Complete autonomous mission without injected faults |
 | `altimeter_freeze` | `controlled_abort` | Freeze a critical altitude channel |
 | `velocity_bias` | `validation_fail` | Bias the vertical-velocity feedback signal |
-| `sensor_delay` | `controlled_abort` | Increase altimeter latency at an exact tick |
+| `sensor_delay` | `validation_fail` | Increase altimeter latency at an exact tick |
 | `degraded_actuator` | `validation_fail` | Slow and rate-limit physical actuator response |
 
 Scenario outcomes are contracts, not hard-coded behavior. An expected controlled abort or validation failure can pass its regression contract when the actual outcome matches and the configured fault genuinely activated.
