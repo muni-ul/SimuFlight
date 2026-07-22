@@ -1,0 +1,149 @@
+schema_version = 1
+id = "nominal"
+description = "Nominal autonomous ascent, coast, descent, and landing"
+seed = 42
+dt = 0.02
+max_time = 60.0
+
+[initial_state]
+x_m = 0.0
+y_m = 0.0
+vx_m_s = 0.0
+vy_m_s = 0.0
+theta_deg = 0.0
+omega_deg_s = 0.0
+mass_kg = 1200.0
+
+[vehicle]
+dry_mass_kg = 900.0
+max_thrust_n = 18000.0
+max_mass_flow_rate_kg_s = 5.0
+moment_of_inertia_kg_m2 = 4500.0
+thrust_lever_arm_m = 2.0
+
+[environment]
+gravity_m_s2 = 9.80665
+
+[sensors.altimeter]
+enabled = true
+sample_interval_s = 0.02
+noise_std = 0.05
+bias = 0.0
+delay_s = 0.0
+[sensors.vertical_velocity]
+enabled = true
+sample_interval_s = 0.02
+noise_std = 0.02
+bias = 0.0
+delay_s = 0.0
+[sensors.horizontal_position]
+enabled = true
+sample_interval_s = 0.04
+noise_std = 0.02
+bias = 0.0
+delay_s = 0.0
+[sensors.horizontal_velocity]
+enabled = true
+sample_interval_s = 0.04
+noise_std = 0.02
+bias = 0.0
+delay_s = 0.0
+[sensors.attitude]
+enabled = true
+sample_interval_s = 0.02
+noise_std = 0.0005
+bias = 0.0
+delay_s = 0.0
+[sensors.gyro]
+enabled = true
+sample_interval_s = 0.02
+noise_std = 0.0005
+bias = 0.0
+delay_s = 0.0
+
+[controller]
+update_interval_s = 0.02
+[controller.throttle_pid]
+kp = 0.08
+ki = 0.015
+kd = 0.0
+output_min = 0.0
+output_max = 1.0
+integral_min = -10.0
+integral_max = 10.0
+[controller.attitude_pid]
+kp = 4.5
+ki = 0.0
+kd = 2.0
+output_min = -8.0
+output_max = 8.0
+integral_min = -1.0
+integral_max = 1.0
+
+[controller.profiles.PRELAUNCH]
+target_vertical_velocity_m_s = 0.0
+target_pitch_deg = 0.0
+base_throttle = 0.0
+throttle_enabled = false
+attitude_enabled = false
+[controller.profiles.ASCENT]
+target_vertical_velocity_m_s = 22.0
+target_pitch_deg = 0.0
+base_throttle = 0.72
+throttle_enabled = true
+attitude_enabled = true
+[controller.profiles.COAST]
+target_vertical_velocity_m_s = 0.0
+target_pitch_deg = 0.0
+base_throttle = 0.0
+throttle_enabled = false
+attitude_enabled = true
+[controller.profiles.DESCENT]
+target_vertical_velocity_m_s = -6.0
+target_pitch_deg = 0.0
+base_throttle = 0.62
+throttle_enabled = true
+attitude_enabled = true
+[controller.profiles.LANDING]
+target_vertical_velocity_m_s = -1.0
+target_pitch_deg = 0.0
+base_throttle = 0.62
+throttle_enabled = true
+attitude_enabled = true
+[controller.profiles.LANDED]
+target_vertical_velocity_m_s = 0.0
+target_pitch_deg = 0.0
+base_throttle = 0.0
+throttle_enabled = false
+attitude_enabled = false
+[controller.profiles.ABORT]
+target_vertical_velocity_m_s = 0.0
+target_pitch_deg = 0.0
+base_throttle = 0.0
+throttle_enabled = false
+attitude_enabled = false
+
+[actuators]
+min_throttle = 0.0
+max_throttle = 1.0
+gimbal_limit_deg = 10.0
+throttle_tau_s = 0.15
+gimbal_tau_s = 0.08
+throttle_max_rate = 3.0
+gimbal_max_rate_deg_s = 45.0
+
+[mission]
+prelaunch_hold_s = 0.5
+ascent_cutoff_altitude_m = 100.0
+descent_entry_velocity_m_s = -0.25
+landing_entry_altitude_m = 25.0
+landed_altitude_threshold_m = 0.25
+transition_confirmation_ticks = 3
+abort_invalid_confirm_ticks = 10
+
+[validation]
+expected_outcome = "pass"
+max_landing_vertical_speed_m_s = 2.0
+max_horizontal_error_m = 5.0
+max_pitch_error_deg = 5.0
+require_valid_transitions = true

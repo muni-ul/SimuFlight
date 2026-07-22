@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Any
 
 from astraloop.model.state import VehicleState
 
@@ -17,3 +18,15 @@ class SimulationResult:
     final_time: float
     final_state: VehicleState
     termination_reason: TerminationReason
+
+
+@dataclass(frozen=True, slots=True)
+class RunResult:
+    scenario_id: str
+    config_digest: str
+    simulation: SimulationResult
+    final_mission_state: str
+    telemetry: tuple[Any, ...]
+    events: tuple[Any, ...]
+    active_fault_ids: tuple[str, ...]
+    artifact_directory: str | None = None
