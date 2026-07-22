@@ -11,6 +11,7 @@ from typing import Any
 from astraloop.config.schema import ResolvedScenarioConfig
 from astraloop.model.measurements import SensorName
 from astraloop.telemetry.recorder import CompletedTelemetry, TelemetryFrame
+from astraloop.telemetry.plotting import write_diagnostic_plot
 
 
 class ArtifactError(OSError):
@@ -24,6 +25,7 @@ class RunArtifacts:
     events_json: Path
     resolved_config_json: Path
     summary_json: Path
+    flight_plot_png: Path
 
 
 CSV_COLUMNS = (
@@ -71,6 +73,7 @@ class ArtifactWriter:
         config: ResolvedScenarioConfig,
         telemetry: CompletedTelemetry,
         summary: dict[str, Any],
+        validation: Any,
     ) -> RunArtifacts:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         scenario_root = self.root / config.id
@@ -90,11 +93,12 @@ class ArtifactWriter:
             self._json(staging / "events.json", events)
             self._json(staging / "resolved_config.json", asdict(config))
             self._json(staging / "summary.json", summary)
+            write_diagnostic_plot(staging / "flight_plot.png", telemetry, config, validation)
             staging.rename(final)
         except Exception as exc:
             shutil.rmtree(staging, ignore_errors=True)
             raise ArtifactError(f"Failed to publish run artifacts: {exc}") from exc
-        return RunArtifacts(final, final / "telemetry.csv", final / "events.json", final / "resolved_config.json", final / "summary.json")
+        return RunArtifacts(final, final / "telemetry.csv", final / "events.json", final / "resolved_config.json", final / "summary.json", final / "flight_plot.png")
 
     @staticmethod
     def _json(path: Path, value: Any) -> None:

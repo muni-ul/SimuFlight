@@ -93,6 +93,7 @@ def run_scenario(
                 "termination_reason": simulation.termination_reason.value,
                 "validation": asdict(validation),
             },
+            validation,
         )
         artifact_directory = str(artifacts.directory)
 
