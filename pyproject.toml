@@ -7,7 +7,7 @@ name = "astraloop"
 version = "0.1.0"
 description = "Deterministic software-in-the-loop flight control and validation system"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["numpy>=2.0"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/astraloop"]
