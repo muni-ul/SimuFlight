@@ -9,5 +9,22 @@ description = "Deterministic software-in-the-loop flight control and validation 
 requires-python = ">=3.11"
 dependencies = ["numpy>=2.0", "matplotlib>=3.9"]
 
+[project.optional-dependencies]
+dev = ["pytest>=8.3", "ruff>=0.9", "pyright>=1.1.390", "scipy>=1.14"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--strict-markers", "--strict-config"]
+xfail_strict = true
+filterwarnings = ["error"]
+markers = [
+  "scenario: complete configured mission regression",
+  "numerical: analytical or independent numerical verification",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/astraloop"]
